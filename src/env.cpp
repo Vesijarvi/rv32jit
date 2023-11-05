@@ -549,6 +549,8 @@ void env::BootElf(const char *path, ElfImage *elf)
         mmu::mmap(mmu::ASPACE_SIZE - mmu::PAGE_SIZE - stk_size, stk_size,
                   PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE | MAP_FIXED);
     elf->stack_start = mmu::h2g(stk_ptr) + stk_size;
+    printf("After BootElf() stack pointer: %X, stk_size: %X\n\n", stk_ptr, stk_size);
+    printf("After BootElf() stack: %X\n\n", elf->stack_start);
 }
 
 // -march=rv32i -O2 -fpic -fpie -static
@@ -677,13 +679,17 @@ void env::InitArgVectors(ElfImage *elf, int argv_n, char **argv)
     uabi_ulong auxv_salt_g = stk =
         AllocArgVectorStr(stk, auxv_salt, sizeof(auxv_salt));
 
-    std::vector<u32> argv_strings_g;
+    printf("stack start: %X\n\n", stk);
+
+    std::vector<uabi_ulong> argv_strings_g;
     argv_strings_g.reserve(argv_n);
 
     for (int i = 0; i < argv_n; ++i) {
         stk = AllocArgVectorStr(stk, argv[i]);
         argv_strings_g.push_back(stk);
+        printf("index[%d]: %X, %s\n", i, stk, stk);
     }
+    printf("\n");
 
     stk &= -4;
 
@@ -699,8 +705,16 @@ void env::InitArgVectors(ElfImage *elf, int argv_n, char **argv)
     uabi_ulong envp_p = argv_p + sizeof(uabi_ulong) * (argv_n + 1);
     uabi_ulong auxv_p = envp_p + sizeof(uabi_ulong) * (envp_n + 1);
 
-    auto push_arg = [](uint32_t &vec, uint32_t val) {
-        *(uabi_ulong *) mmu::g2h(vec) = (val);
+    printf("argc_p = %X\n", argc_p);
+    printf("argv_p = %X\n", argv_p);
+    printf("envp_p = %X\n", envp_p);
+    printf("auxv_p = %X\n", auxv_p);
+    printf("\n\n");
+
+    auto push_arg = [](uabi_ulong &vec, uint32_t val) {
+        std::memcpy(mmu::g2h(vec), &val, sizeof(uint32_t));
+        printf("push args --> before: %X, after g2h: %X\n", vec, mmu::g2h(vec));
+        printf("push args --> expected: %X, get: %X\n", val, *(uabi_long*)mmu::g2h(vec));
         vec += sizeof(uabi_ulong);
     };
     auto push_auxv = [&](uint32_t idx, uint32_t val) {
@@ -710,8 +724,12 @@ void env::InitArgVectors(ElfImage *elf, int argv_n, char **argv)
 
     push_arg(argc_p, argv_n);
 
-    for (int i = 0; i < argv_n; ++i)
+    printf("\n----- start push args -----\n");
+
+    for (int i = 0; i < argv_n; ++i) {
         push_arg(argv_p, argv_strings_g[i]);
+        printf("index[%d]: %X, %X\n\n", i, argv_p, *(uabi_long*)(argv_p));
+    }
     push_arg(argv_p, 0);
 
     push_arg(envp_p, lc_all_str_g);

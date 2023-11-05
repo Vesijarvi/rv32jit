@@ -38,6 +38,7 @@ void mmu::Init()
         Panic("mmu::Init failed");
     }
 #endif
+    printf("MMU Base is %X\n\n", base);
 }
 
 void mmu::Destroy()
